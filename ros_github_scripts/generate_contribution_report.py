@@ -1,3 +1,17 @@
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import datetime
 from string import Template
@@ -47,7 +61,7 @@ CONTRIBUTION_QUERY = Template("""
 """)
 
 
-def graphql_query(query: str, token: Optional[str] = None):
+def graphql_query(query: str, token: Optional[str] = None) -> dict:
     headers = {'Authorization': 'Bearer {}'.format(token)} if token else None
     request = requests.post(
         'https://api.github.com/graphql',
@@ -65,7 +79,7 @@ def query_contributions(
     orgs: List[str],
     since: datetime.date,
     until: Optional[datetime.date] = None,
-):
+) -> List[dict]:
     if until:
         date_range = '{}..{}'.format(since.isoformat(), until.isoformat())
     else:
@@ -112,7 +126,7 @@ def format_github_time_to_date(value: str) -> str:
     return parse_github_time(value).date().isoformat()
 
 
-def line_format_contribution(node: dict):
+def line_format_contribution(node: dict) -> str:
     """Format an individual GitHub PR into our contribution line format."""
     title = node['title']
     author = node['author']['name']

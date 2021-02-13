@@ -21,15 +21,10 @@ setup(
     description=short_description,
     long_description=long_description,
     install_requires=[
-        'Jinja2>=2.10,<3.0',
         'markdown2==2.3.7',
         'PyGithub==1.43.5',
         'PyYAML==5.3.1',
         'retrying==1.3.3',
-        'boto3==1.10.5',
-        'botocore==1.13.5',
-        'pynacl==1.4.0',
-        'tqdm==4.52.0',
         # This package has not been released to pypi since 2019,
         # but the latest code contains features we need.
         # until it is released again, get it from github

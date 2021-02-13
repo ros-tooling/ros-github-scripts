@@ -1,10 +1,21 @@
-#!/usr/bin/env python3
-"""Generates a Gist to kick-off ROS 2 CI jobs as well as comment to be pasted in the PR."""
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 import logging
 import os
-from typing import List
+from typing import Dict, List
 
 import github
 from github import Github, InputFileContent
@@ -20,11 +31,11 @@ DEFAULT_TARGET = 'master'
 CI_SERVER = 'https://ci.ros2.org'
 
 
-def panic(msg):
+def panic(msg: str) -> None:
     raise RuntimeError('Panic: ' + msg)
 
 
-def fetch_repos(target_release: str):
+def fetch_repos(target_release: str) -> dict:
     """Fetch the repos file for the specific release."""
     repos_response = requests.get(REPOS_URL.format(target_release))
 
@@ -39,7 +50,7 @@ def create_ci_gist(
     target_release: str
 ) -> github.Gist.Gist:
     """Create gist for the list of pull requests."""
-    logger.info("Creating ros2.repos Gist for PRs")
+    logger.info('Creating ros2.repos Gist for PRs')
     master_repos = fetch_repos(target_release)
     for github_pr in pulls:
         pr_ref = github_pr.head.ref
@@ -73,7 +84,9 @@ def create_ci_gist(
     return gist
 
 
-def fetch_user_pulls(github_instance):
+def fetch_user_pulls(
+    github_instance: Github
+) -> github.PaginatedList.PaginatedList[github.Issue.Issue]:
     """
     Return a list of github.PullRequest objects for the user associated with the github API token.
 
@@ -93,16 +106,19 @@ def fetch_user_pulls(github_instance):
     return prs
 
 
-def print_format_issue(issue):
+def print_format_issue(issue: github.Issue.Issue) -> str:
     return '{}#{}'.format(issue.repository.full_name, issue.number)
 
 
-def prompt_pull_selection(pulls):
-    """Prompt user to select from the input list of pull requests.
-
-    Return the list of chosen ones.
+def prompt_pull_selection(
+    pulls: github.PaginatedList.PaginatedList[github.Issue.Issue]
+) -> List[github.PullRequest.PullRequest]:
     """
-    choices = {}
+    Prompt user to select from the list of their authored pull requests.
+
+    Return the list of chosen PRs.
+    """
+    choices: Dict[int, github.Issue.Issue] = {}
     while True:
         print('\n>>> Choose a PR to add to Gist <<<\n')
         for i, option in enumerate(pulls):
@@ -123,15 +139,18 @@ def prompt_pull_selection(pulls):
                 break
 
         try:
-            choice = int(choice)
-            choices[choice] = pulls[choice]
+            choice_index = int(choice)
+            choices[choice_index] = pulls[choice_index]
         except (ValueError, IndexError):
             print('{} is not a valid choice'.format(choice))
 
     return [issue.as_pull_request() for issue in choices.values()]
 
 
-def validate_and_fetch_pull_list(github_instance, pull_list):
+def validate_and_fetch_pull_list(
+    github_instance: Github, pull_list: List[str]
+) -> List[github.PullRequest.PullRequest]:
+    """Fetch GitHub pull requests given the "org/repo#N" string input specifier format."""
     repos_to_prs = {}
     for pull in pull_list:
         if pull.count('#') != 1:
@@ -143,15 +162,14 @@ def validate_and_fetch_pull_list(github_instance, pull_list):
             panic("Pull request number '{}' isn't a number...".format(pull_number_str))
 
         if repo in repos_to_prs:
-            panic("We don't have the ability to simultaneously run multiple PRs for the _same_ "
-                  'repository ({}), sorry!'.format(repo))
+            panic(f"Can't simultaneously test multiple PRs for the same repository ({repo})")
 
         repos_to_prs[repo] = pull_number
 
     return_prs = []
     for repo_name, pull_number in repos_to_prs.items():
-        repo = github_instance.get_repo(repo_name)
-        return_prs.append(repo.get_pull(pull_number))
+        gh_repo = github_instance.get_repo(repo_name)
+        return_prs.append(gh_repo.get_pull(pull_number))
 
     return return_prs
 
@@ -205,7 +223,7 @@ def run_jenkins_build(
     """
     # Example output (note that the build badges are on markdown list lines starting with *):
 
-    Started by user Emerson Knapp
+    Started by user Example User
     Running as SYSTEM
     Building on master in workspace /var/lib/jenkins/jobs/ci_launcher/workspace
     * Linux [![Build Status](http://ci.ros2.org/buildStatus/icon?job=ci_linux&build=13344)](http://ci.ros2.org/job/ci_linux/13344/)
@@ -253,7 +271,7 @@ def parse_args():
              '(e.g. ros2/rclpy#353)')
     parser.add_argument(
         '-k', '--packages', type=str, nargs='+', default=None,
-        help="Space-separated list of packages to be built and tested.")
+        help='Space-separated list of packages to be built and tested.')
     parser.add_argument(
         '-i', '--interactive', action='store_true',
         help='Prompt me to select my pull requests from a list, instead of specifying.')

@@ -1,14 +1,23 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import logging
-import os
 
 from ament_flake8.main import main as run_flake8
 from ament_mypy.main import main as run_mypy
 from ament_pep257.main import main as run_pep257
-import pkg_resources
 import pytest
-from yamllint.cli import run as run_yamllint
 
 
 @pytest.mark.flake8
@@ -30,40 +39,3 @@ def test_mypy():
 @pytest.mark.pep257
 def test_pep257():
     assert run_pep257(argv=['.']) == 0, 'Found pep257 errors / warnings'
-
-
-@pytest.mark.linter
-def test_yamllint():
-    any_error = False
-    mixins_dir = pkg_resources.resource_filename('robomaker_github_tools', 'data')
-    for name in sorted(os.listdir(mixins_dir)):
-        if name.endswith('.yaml'):
-            print(
-                'This package requires all YAML files use the .yml extension '
-                f'(found .yaml instead: {name})')
-            any_error = True
-            continue
-
-        if not name.endswith('.yml'):
-            continue
-
-        try:
-            run_yamllint([
-                '--config-data',
-                '{'
-                'extends: default, '
-                'rules: {'
-                'document-start: {present: false}, '
-                'empty-lines: {max: 0}, '
-                'key-ordering: {}, '
-                'line-length: {max: 999}'
-                '}'
-                '}',
-                '--strict',
-                os.path.join(mixins_dir, name),
-            ])
-        except SystemExit as e:
-            any_error |= bool(e.code)
-            continue
-
-    assert not any_error, 'Should not have seen any errors'
