@@ -1,4 +1,3 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 from pathlib import Path
 
 from setuptools import find_packages
