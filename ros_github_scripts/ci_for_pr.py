@@ -86,7 +86,7 @@ def create_ci_gist(
 
 def fetch_user_pulls(
     github_instance: Github
-) -> github.PaginatedList.PaginatedList[github.Issue.Issue]:
+) -> github.PaginatedList.PaginatedList:
     """
     Return a list of github.PullRequest objects for the user associated with the github API token.
 
@@ -111,7 +111,7 @@ def print_format_issue(issue: github.Issue.Issue) -> str:
 
 
 def prompt_pull_selection(
-    pulls: github.PaginatedList.PaginatedList[github.Issue.Issue]
+    pulls: github.PaginatedList.PaginatedList
 ) -> List[github.PullRequest.PullRequest]:
     """
     Prompt user to select from the list of their authored pull requests.
