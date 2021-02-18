@@ -103,7 +103,6 @@ def query_contributions(
         response = graphql_query(contribution_query, token)
         results = response['data']
         contributions += results['search']['edges']
-        print(f'Got page of results, now {len(contributions)}')
 
         page_info = results['search']['pageInfo']
         end_cursor = page_info['endCursor']
@@ -132,7 +131,7 @@ def line_format_contribution(node: dict) -> str:
     author = node['author']['name']
     link = node['permalink']
     merged = format_github_time_to_date(node['mergedAt'])
-    return f'{title} | {author} | [{link}]({link}) (merged {merged})'
+    return f'[{title}]({link}) -P {author} (merged {merged})'
 
 
 def line_format_contributions(
