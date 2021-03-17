@@ -131,7 +131,7 @@ def line_format_contribution(node: dict) -> str:
     author = node['author']['name']
     link = node['permalink']
     merged = format_github_time_to_date(node['mergedAt'])
-    return f'[{title}]({link}) -P {author} (merged {merged})'
+    return f'[{title}]({link}) - {author} (merged {merged})'
 
 
 def line_format_contributions(
@@ -145,13 +145,14 @@ def line_format_contributions(
 
     :returns: A list of markdown lines
     """
+    contrib_authors = set(node['node']['author']['login'] for node in contributions)
     lines = [
-        '# Contributions', '',
-        'By Authors: {}'.format(', '.join(authors)), '',
-        'To Repositories in Organizations: {}'.format(', '.join(orgs)), '',
-        f'Merged Since: {since.isoformat()}', '',
-        f'This report generated: {datetime.date.today().isoformat()}', '',
-        f'Contribution count (remember to update if you remove things): {len(contributions)}', '',
+        '* By Authors: {}'.format(', '.join(contrib_authors)),
+        '* To Repositories in Organizations: {}'.format(', '.join(orgs)), '',
+        f'* Merged Since: {since.isoformat()}', '',
+        f'* This report generated: {datetime.date.today().isoformat()}', '',
+        f'* Contribution count (remember to update if you remove things): {len(contributions)}',
+        '',
     ]
 
     byrepo: Dict[str, List[str]] = {}
