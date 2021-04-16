@@ -188,7 +188,7 @@ def run_jenkins_build(
     test_args: str,
     gist_url: str,
     github_login: str,
-    github_token: str
+    github_token: str,
 ) -> str:
     """
     Run a ci_launcher build for the selected packages, with the given gist as sources.
@@ -198,8 +198,18 @@ def run_jenkins_build(
     from jenkinsapi.jenkins import Jenkins
     logger.info('Connecting to Jenkins server')
     jenkins = Jenkins(CI_SERVER, username=github_login, password=github_token, use_crumb=True)
-    logger.info(f'Fetching build job info for "{DEFAULT_JOB}"')
-    build_job = jenkins[DEFAULT_JOB]
+    retries_remaining = 1
+    build_job = None
+    while retries_remaining >= 0:
+        try:
+            logger.info(f'Fetching build job info for "{DEFAULT_JOB}"')
+            build_job = jenkins[DEFAULT_JOB]
+            break
+        except requests.exceptions.ConnectionError as e:
+            logger.warn(f'Failed to fetch job info, retries remaining: {retries_remaining}')
+            retries_remaining -= 1
+            if retries_remaining < 0:
+                raise e
     param_spec = build_job.get_params()
 
     # start by taking all the default parameters
