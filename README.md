@@ -38,7 +38,11 @@ ros-github-contribution-report \
   --render > my_contributions_this_year.html
 ```
 
-
+Dependencies you likely need to install first:
+```
+pip3 install PyGithub
+pip3 install markdown2
+```
 
 ## Developing
 
