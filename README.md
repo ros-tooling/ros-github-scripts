@@ -1,6 +1,16 @@
 # ros-github-scripts
 Utility scripts to ease management of GitHub projects for ROS / ROS 2
 
+## Installation
+
+This is a `setuptools`-based python package. To install it and all its dependencies:
+
+```
+# Note that this is by _path_, it's not the name of a package on PyPI - so substitute as appropriate for your working directory
+pip3 install ./ros-github-scripts
+```
+
+
 ## ros-ci-for-pr
 
 Creates a github gist containing a modified ros2.repos, with the source branches from one or more PRs.
