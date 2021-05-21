@@ -62,7 +62,7 @@ CONTRIBUTION_QUERY = Template("""
 
 
 def graphql_query(query: str, token: Optional[str] = None) -> dict:
-    headers = {'Authorization': 'Bearer {}'.format(token)} if token else None
+    headers = {'Authorization': f'Bearer {token}'} if token else None
     request = requests.post(
         'https://api.github.com/graphql',
         json={'query': query},
@@ -70,27 +70,29 @@ def graphql_query(query: str, token: Optional[str] = None) -> dict:
     if request.status_code == 200:
         return request.json()
     else:
-        raise RuntimeError('Query failed with code {}'.format(request.status_code))
+        raise RuntimeError(f'Query failed with code {request.status_code}')
 
 
 def query_contributions(
     token: Optional[str],
     authors: List[str],
     orgs: List[str],
+    repos: List[str],
     since: datetime.date,
     until: Optional[datetime.date] = None,
 ) -> List[dict]:
     if until:
-        date_range = '{}..{}'.format(since.isoformat(), until.isoformat())
+        date_range = f'{since.isoformat()}..{until.isoformat()}'
     else:
-        date_range = '>={}'.format(since.isoformat())
+        date_range = f'>={since.isoformat()}'
 
     search_query = ' '.join([
         'sort:updated-desc',
         'is:pr is:merged',
-        ' '.join(['author:{}'.format(a) for a in authors]),
-        ' '.join(['org:{}'.format(o) for o in orgs]),
-        'merged:{}'.format(date_range),
+        ' '.join([f'author:{a}' for a in authors]),
+        ' '.join([f'org:{o}' for o in orgs]),
+        ' '.join([f'repo:{r}' for r in repos]),
+        f'merged:{date_range}',
     ])
 
     cursor = 'null'
@@ -128,7 +130,7 @@ def format_github_time_to_date(value: str) -> str:
 def line_format_contribution(node: dict) -> str:
     """Format an individual GitHub PR into our contribution line format."""
     title = node['title']
-    author = node['author']['name']
+    author = node['author'].get('name')
     link = node['permalink']
     merged = format_github_time_to_date(node['mergedAt'])
     return f'[{title}]({link}) - {author} (merged {merged})'
@@ -145,7 +147,8 @@ def line_format_contributions(
 
     :returns: A list of markdown lines
     """
-    contrib_authors = set(node['node']['author']['login'] for node in contributions)
+    contrib_authors = {node['node'].get('author', {}).get('login', 'None') for node in contributions}
+    print(f'Authos: {contrib_authors}')
     lines = [
         '* By Authors: {}'.format(', '.join(contrib_authors)),
         '* To Repositories in Organizations: {}'.format(', '.join(orgs)), '',
@@ -159,12 +162,15 @@ def line_format_contributions(
     for contrib_json in contributions:
         node = contrib_json['node']
         repo = node['repository']['nameWithOwner']
+        # skip bots
+        if node['author'].get('login') is None:
+            continue
         byrepo.setdefault(repo, []).append(line_format_contribution(node))
 
     for repo, contribs in sorted(byrepo.items()):
-        lines.append('* {}'.format(repo))
+        lines.append(f'* {repo}')
         for contrib_str in contribs:
-            lines.append('  * {}'.format(contrib_str))
+            lines.append(f'  * {contrib_str}')
 
     return lines
 
@@ -215,6 +221,7 @@ class ContributionReportOptions(NamedTuple):
     until: Optional[datetime.date]
     authors: List[str]
     orgs: List[str]
+    repos: List[str]
     token: str
     formatter: Callable
     render_html: bool
@@ -271,6 +278,12 @@ def parse_args(args=None) -> ContributionReportOptions:
         default=[],
         help='Report contributions only to repos these github organizations')
     parser.add_argument(
+        '--repos',
+        nargs='+',
+        required=False,
+        default=[],
+        help='Report contributions to these specific repositories (in addition to --orgs)')
+    parser.add_argument(
         '-f', '--format',
         type=str,
         choices=formatters.keys(),
@@ -288,9 +301,9 @@ def parse_args(args=None) -> ContributionReportOptions:
         parsed = parser.parse_args(args)
 
     if not parsed.authors and not parsed.authors_from_org:
-        parser.error(
+        print(
             'Neither --authors nor --authors-from-org specified, '
-            'at least one is required to narrow the potentially huge search results.')
+            'the results might be huge...')
 
     authors = all_authors(parsed.authors, parsed.authors_from_org, parsed.token)
 
@@ -300,6 +313,7 @@ def parse_args(args=None) -> ContributionReportOptions:
         authors=authors,
         token=parsed.token,
         orgs=parsed.orgs,
+        repos=parsed.repos,
         formatter=formatters[parsed.format],
         render_html=parsed.render_html)
 
@@ -307,7 +321,7 @@ def parse_args(args=None) -> ContributionReportOptions:
 def main(args=None):
     options = parse_args(args)
     contributions = query_contributions(
-        options.token, options.authors, options.orgs, options.since, options.until)
+        options.token, options.authors, options.orgs, options.repos, options.since, options.until)
     lines = options.formatter(
         contributions, options.since, options.authors, options.orgs)
     md_content = '\n'.join(lines)
