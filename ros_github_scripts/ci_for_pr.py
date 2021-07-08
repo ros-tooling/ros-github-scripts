@@ -29,6 +29,7 @@ DEFAULT_JOB = 'ci_launcher'
 REPOS_URL = 'https://raw.githubusercontent.com/ros2/ros2/{}/ros2.repos'
 DEFAULT_TARGET = 'master'
 CI_SERVER = 'https://ci.ros2.org'
+SERVER_RETRIES = 2
 
 
 def panic(msg: str) -> None:
@@ -189,6 +190,7 @@ def run_jenkins_build(
     gist_url: str,
     github_login: str,
     github_token: str,
+    target_release: str,
 ) -> str:
     """
     Run a ci_launcher build for the selected packages, with the given gist as sources.
@@ -198,7 +200,7 @@ def run_jenkins_build(
     from jenkinsapi.jenkins import Jenkins
     logger.info('Connecting to Jenkins server')
     jenkins = Jenkins(CI_SERVER, username=github_login, password=github_token, use_crumb=True)
-    retries_remaining = 1
+    retries_remaining = SERVER_RETRIES
     build_job = None
     while retries_remaining >= 0:
         try:
@@ -219,6 +221,7 @@ def run_jenkins_build(
     }
     # augment with specific values for this PR
     build_params['CI_ROS2_REPOS_URL'] = gist_url
+    build_params['CI_ROS_DISTRO'] = target_release
     build_params['CI_BUILD_ARGS'] += f' {build_args}'
     build_params['CI_TEST_ARGS'] += f' {test_args}'
 
@@ -327,8 +330,14 @@ def main():
     comment_texts.append(format_ci_details(gist_url, extra_build_args, extra_test_args))
     if parsed.build:
         user = github_instance.get_user().login
-        comment_texts.append(run_jenkins_build(
-            extra_build_args, extra_test_args, gist_url, user, github_access_token))
+        comment_texts.append(
+            run_jenkins_build(
+                extra_build_args,
+                extra_test_args,
+                gist_url,
+                user,
+                github_access_token,
+                target_release=parsed.target))
 
     comment_results(parsed.comment, '\n'.join(comment_texts), chosen_pulls)
 
