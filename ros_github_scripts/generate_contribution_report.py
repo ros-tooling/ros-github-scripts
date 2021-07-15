@@ -148,7 +148,6 @@ def line_format_contributions(
     :returns: A list of markdown lines
     """
     contrib_authors = {node['node'].get('author', {}).get('login', 'None') for node in contributions}
-    print(f'Authos: {contrib_authors}')
     lines = [
         '* By Authors: {}'.format(', '.join(contrib_authors)),
         '* To Repositories in Organizations: {}'.format(', '.join(orgs)), '',
