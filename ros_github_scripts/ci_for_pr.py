@@ -82,6 +82,7 @@ def create_ci_gist(
         public=True,
         files={'ros2.repos': input_file},
         description='CI input for PR {}'.format(github_pr.url))
+    # TODO[eknapp] githup_pr is bad because this is outside the loop
     return gist
 
 
@@ -175,13 +176,54 @@ def validate_and_fetch_pull_list(
     return return_prs
 
 
-def format_ci_details(gist_url: str, extra_build_args: str, extra_test_args: str) -> str:
+def format_ci_details(
+    gist_url: str, extra_build_args: str, extra_test_args: str, target_release: str,
+) -> str:
     return '\n'.join([
         f'Gist: {gist_url}',
         f'BUILD args: {extra_build_args}',
         f'TEST args: {extra_test_args}',
+        f'ROS Distro: {target_release}',
         'Job: {}'.format(DEFAULT_JOB),
     ])
+
+
+def other_jenkins_build(
+    build_args: str,
+    test_args: str,
+    gist_url: str,
+    github_login: str,
+    github_token: str,
+    target_release: str,
+):
+    from jenkins import Jenkins
+    logger.info('Connecting to Jenkins server')
+    jenkins = Jenkins(CI_SERVER, username=github_login, password=github_token)
+    logger.info(f'Fetching build job info for "{DEFAULT_JOB}"')
+    info = jenkins.get_job_info(DEFAULT_JOB)
+    properties = info['property']
+    build_params = {}
+    for p in properties:
+        if p['_class'] == 'hudson.model.ParametersDefinitionProperty':
+            definitions = p['parameterDefinitions']
+            for d in definitions:
+                build_params[d['name']] = d['defaultParameterValue']['value']
+    # augment with specific values for this PR
+    build_params['CI_ROS2_REPOS_URL'] = gist_url
+    build_params['CI_ROS_DISTRO'] = target_release
+    build_params['CI_BUILD_ARGS'] += f' {build_args}'
+    build_params['CI_TEST_ARGS'] += f' {test_args}'
+
+    logger.info(f'Invoking build job with params: {build_params}')
+    try:
+        jenkins.build_job(DEFAULT_JOB, parameters=build_params, token=github_token)
+    except Exception as e:
+        print(e)
+        raise
+
+    last_build_number = jenkins.get_job_info(DEFAULT_JOB)['lastCompletedBuild']['number']
+    build_info = jenkins.get_build_info(DEFAULT_JOB, last_build_number)
+    logger.info(build_info)
 
 
 def run_jenkins_build(
@@ -228,7 +270,7 @@ def run_jenkins_build(
     # Start the build and wait until it is completed. ci_launcher exits immediately after
     # queuing the child builds, so this should only take a few seconds
     logger.info(f'Invoking build job with params: {build_params}')
-    queue_item = build_job.invoke(block=True, build_params=build_params)
+    queue_item = build_job.invoke(block=False, build_params=build_params)
     logger.info('Build complete, fetching console output')
     build_instance = queue_item.get_build()
     console_output = build_instance.get_console()
@@ -327,7 +369,8 @@ def main():
         extra_test_args = f'--packages-select {packages_changed}'
 
     comment_texts = []
-    comment_texts.append(format_ci_details(gist_url, extra_build_args, extra_test_args))
+    comment_texts.append(
+        format_ci_details(gist_url, extra_build_args, extra_test_args, parsed.target))
     if parsed.build:
         user = github_instance.get_user().login
         comment_texts.append(
