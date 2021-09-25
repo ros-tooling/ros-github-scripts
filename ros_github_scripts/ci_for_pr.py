@@ -27,7 +27,7 @@ logger = logging.getLogger('')
 
 DEFAULT_JOB = 'ci_launcher'
 REPOS_URL = 'https://raw.githubusercontent.com/ros2/ros2/{}/ros2.repos'
-DEFAULT_TARGET = 'master'
+DEFAULT_TARGET = 'rolling'
 CI_SERVER = 'https://ci.ros2.org'
 SERVER_RETRIES = 2
 
@@ -38,7 +38,10 @@ def panic(msg: str) -> None:
 
 def fetch_repos(target_release: str) -> dict:
     """Fetch the repos file for the specific release."""
-    repos_response = requests.get(REPOS_URL.format(target_release))
+    branch = target_release
+    if branch == 'rolling':
+        branch = 'master'
+    repos_response = requests.get(REPOS_URL.format(branch))
 
     repos_text = repos_response.text
     toplevel_dict = yaml.safe_load(repos_text)
@@ -53,10 +56,13 @@ def create_ci_gist(
     """Create gist for the list of pull requests."""
     logger.info('Creating ros2.repos Gist for PRs')
     master_repos = fetch_repos(target_release)
+    shortnames = []
     for github_pr in pulls:
         pr_ref = github_pr.head.ref
         pr_repo = github_pr.head.repo.full_name
         base_repo = github_pr.base.repo.full_name
+
+        shortnames.append(f'{base_repo}#{github_pr.number}')
 
         # Remove the existing repository from the list
         repo_entry = master_repos.pop(base_repo, None)
@@ -81,7 +87,7 @@ def create_ci_gist(
     gist = github_instance.get_user().create_gist(
         public=True,
         files={'ros2.repos': input_file},
-        description='CI input for PR {}'.format(github_pr.url))
+        description='CI input for PR {}'.format(' '.join(shortnames)))
     return gist
 
 
@@ -175,11 +181,14 @@ def validate_and_fetch_pull_list(
     return return_prs
 
 
-def format_ci_details(gist_url: str, extra_build_args: str, extra_test_args: str) -> str:
+def format_ci_details(
+    gist_url: str, extra_build_args: str, extra_test_args: str, target_release: str,
+) -> str:
     return '\n'.join([
         f'Gist: {gist_url}',
         f'BUILD args: {extra_build_args}',
         f'TEST args: {extra_test_args}',
+        f'ROS Distro: {target_release}',
         'Job: {}'.format(DEFAULT_JOB),
     ])
 
@@ -327,7 +336,8 @@ def main():
         extra_test_args = f'--packages-select {packages_changed}'
 
     comment_texts = []
-    comment_texts.append(format_ci_details(gist_url, extra_build_args, extra_test_args))
+    comment_texts.append(
+        format_ci_details(gist_url, extra_build_args, extra_test_args, parsed.target))
     if parsed.build:
         user = github_instance.get_user().login
         comment_texts.append(
