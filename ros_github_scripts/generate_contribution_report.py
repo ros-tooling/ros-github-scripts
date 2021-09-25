@@ -62,6 +62,7 @@ CONTRIBUTION_QUERY = Template("""
 
 
 def graphql_query(query: str, token: Optional[str] = None) -> dict:
+    # print(query)
     headers = {'Authorization': f'Bearer {token}'} if token else None
     request = requests.post(
         'https://api.github.com/graphql',
@@ -78,13 +79,17 @@ def query_contributions(
     authors: List[str],
     orgs: List[str],
     repos: List[str],
-    since: datetime.date,
+    since: Optional[datetime.date] = None,
     until: Optional[datetime.date] = None,
 ) -> List[dict]:
-    if until:
-        date_range = f'{since.isoformat()}..{until.isoformat()}'
+    if since is None and until is None:
+        merged = ''
     else:
-        date_range = f'>={since.isoformat()}'
+        if until:
+            date_range = f'{since.isoformat()}..{until.isoformat()}'
+        else:
+            date_range = f'>={since.isoformat()}'
+        merged = f'merged:{date_range}'
 
     search_query = ' '.join([
         'sort:updated-desc',
@@ -92,7 +97,7 @@ def query_contributions(
         ' '.join([f'author:{a}' for a in authors]),
         ' '.join([f'org:{o}' for o in orgs]),
         ' '.join([f'repo:{r}' for r in repos]),
-        f'merged:{date_range}',
+        merged,
     ])
 
     cursor = 'null'
