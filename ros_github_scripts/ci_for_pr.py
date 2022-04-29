@@ -307,6 +307,15 @@ def parse_args():
     parser.add_argument(
         '-c', '--comment', action='store_true',
         help='Automatically post a comment on the PRs being built, containing relevant content.')
+    parser.add_argument(
+        '--only-fixes-test', action='store_true',
+        help='The fix being tested only fixes a test, which causes CI to be shorter')
+    parser.add_argument(
+        '--colcon-build-args', type=str, default='',
+        help='Arbitrary colcon arguments to specify to build; must be specified with -b')
+    parser.add_argument(
+        '--colcon-test-args', type=str, default='',
+        help='Arbitrary colcon arguments to specify to test; must be specified with -b')
     return parser.parse_args()
 
 
@@ -328,12 +337,19 @@ def main():
     gist = create_ci_gist(github_instance, chosen_pulls, parsed.target)
     gist_url = gist.files['ros2.repos'].raw_url
 
-    extra_build_args = ''
-    extra_test_args = ''
+    if not parsed.build and (parsed.colcon_build_args or parsed.colcon_test_args):
+        panic('colcon build or test args can only be specified when doing a build')
+
+    extra_build_args = parsed.colcon_build_args
+    extra_test_args = parsed.colcon_test_args
     if parsed.packages:
         packages_changed = ' '.join(parsed.packages)
-        extra_build_args = f'--packages-up-to {packages_changed}'
-        extra_test_args = f'--packages-select {packages_changed}'
+        if parsed.only_fixes_test:
+            extra_build_args += f' --packages-up-to {packages_changed}'
+            extra_test_args += f' --packages-select {packages_changed}'
+        else:
+            extra_build_args += f' --packages-above-and-dependencies {packages_changed}'
+            extra_test_args += f' --packages-above {packages_changed}'
 
     comment_texts = []
     comment_texts.append(
