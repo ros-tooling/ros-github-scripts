@@ -21,7 +21,7 @@ setup(
     long_description=long_description,
     install_requires=[
         'markdown2==2.3.7',
-        'PyGithub==1.43.5',
+        'PyGithub==1.56',
         'PyYAML==5.3.1',
         'retrying==1.3.3',
         # This package has not been released to pypi since 2019,
