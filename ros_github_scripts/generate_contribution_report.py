@@ -135,7 +135,7 @@ def format_github_time_to_date(value: str) -> str:
 def line_format_contribution(node: dict) -> str:
     """Format an individual GitHub PR into our contribution line format."""
     title = node['title']
-    author = node['author'].get('name')
+    author = node['author'].get('name') or node['author'].get('login')
     link = node['permalink']
     merged = format_github_time_to_date(node['mergedAt'])
     return f'[{title}]({link}) - {author} (merged {merged})'
