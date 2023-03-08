@@ -322,7 +322,9 @@ def parse_args():
 def main():
     github_access_token = os.environ.get('GITHUB_ACCESS_TOKEN')
     if not github_access_token:
-        panic('Environment variable GITHUB_ACCESS_TOKEN not set')
+      github_access_token = os.environ.get('GITHUB_TOKEN')
+    if not github_access_token:
+        panic('Neither environment variable GITHUB_ACCESS_TOKEN nor GITHUB_TOKEN are set')
     github_instance = Github(github_access_token)
 
     parsed = parse_args()
