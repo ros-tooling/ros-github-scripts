@@ -136,6 +136,7 @@ def prompt_pull_selection(
     Return the list of chosen PRs.
     """
     choices: Dict[int, github.Issue.Issue] = {}
+    texts = []
     while True:
         print('\n>>> Choose a PR to add to Gist <<<\n')
         for i, option in enumerate(pulls):
@@ -157,11 +158,13 @@ def prompt_pull_selection(
 
         try:
             choice_index = int(choice)
-            choices[choice_index] = pulls[choice_index]
+            current_choice = pulls[choice_index]
+            texts.append(print_format_issue(current_choice))
+            choices[choice_index] = current_choice
         except (ValueError, IndexError):
             print('{} is not a valid choice'.format(choice))
 
-    return [issue.as_pull_request() for issue in choices.values()]
+    return (texts, [issue.as_pull_request() for issue in choices.values()])
 
 
 def validate_and_fetch_pull_list(
@@ -192,9 +195,15 @@ def validate_and_fetch_pull_list(
 
 
 def format_ci_details(
-    gist_url: str, extra_build_args: str, extra_test_args: str, target_release: str,
+    gist_url: str,
+    extra_build_args: str,
+    extra_test_args: str,
+    target_release: str,
+    target_pulls: List[str],
 ) -> str:
+    pull_text = ', '.join(target_pulls)
     return '\n'.join([
+        f'Pulls: {pull_text}',
         f'Gist: {gist_url}',
         f'BUILD args: {extra_build_args}',
         f'TEST args: {extra_test_args}',
@@ -337,15 +346,16 @@ def parse_args():
 def main():
     github_access_token = os.environ.get('GITHUB_ACCESS_TOKEN')
     if not github_access_token:
-      github_access_token = os.environ.get('GITHUB_TOKEN')
+        github_access_token = os.environ.get('GITHUB_TOKEN')
     if not github_access_token:
         panic('Neither environment variable GITHUB_ACCESS_TOKEN nor GITHUB_TOKEN are set')
     github_instance = Github(github_access_token)
 
     parsed = parse_args()
+    pull_texts = parsed.pulls
     if parsed.interactive:
         all_user_pulls = fetch_user_pulls(github_instance)
-        chosen_pulls = prompt_pull_selection(all_user_pulls)
+        pull_texts, chosen_pulls = prompt_pull_selection(all_user_pulls)
     elif not parsed.pulls:
         panic('You must either choose --interactive or provide --pulls')
     else:
@@ -370,7 +380,8 @@ def main():
 
     comment_texts = []
     comment_texts.append(
-        format_ci_details(gist_url, extra_build_args, extra_test_args, parsed.target))
+        format_ci_details(
+            gist_url, extra_build_args, extra_test_args, parsed.target, pull_texts))
     if parsed.build:
         user = github_instance.get_user().login
         comment_texts.append(
