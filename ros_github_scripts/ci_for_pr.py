@@ -31,6 +31,16 @@ DEFAULT_TARGET = 'rolling'
 CI_SERVER = 'https://ci.ros2.org'
 SERVER_RETRIES = 2
 
+ROS_DISTRO_TO_UBUNTU_DISTRO = {
+    'melodic': 'bionic',
+    'noetic': 'focal',
+    'foxy': 'focal',
+    'galactic': 'focal',
+    'humble': 'jammy',
+    'iron': 'jammy',
+    'rolling': ''  # use default
+}
+
 
 def panic(msg: str) -> None:
     raise RuntimeError('Panic: ' + msg)
@@ -206,6 +216,9 @@ def run_jenkins_build(
 
     :returns: Text containing markdown of the build status badges for the launched build.
     """
+    # intentionally raises key_error on unknown distro
+    ubuntu_distro = ROS_DISTRO_TO_UBUNTU_DISTRO[target_release]
+
     from jenkinsapi.jenkins import Jenkins
     logger.info('Connecting to Jenkins server')
     jenkins = Jenkins(CI_SERVER, username=github_login, password=github_token, use_crumb=True)
@@ -233,6 +246,8 @@ def run_jenkins_build(
     build_params['CI_ROS_DISTRO'] = target_release
     build_params['CI_BUILD_ARGS'] += f' {build_args}'
     build_params['CI_TEST_ARGS'] += f' {test_args}'
+    if ubuntu_distro:
+        build_params['CI_UBUNTU_DISTRO'] = ubuntu_distro
 
     # Start the build and wait until it is completed. ci_launcher exits immediately after
     # queuing the child builds, so this should only take a few seconds
