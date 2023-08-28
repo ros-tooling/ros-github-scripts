@@ -22,7 +22,7 @@ setup(
     install_requires=[
         'markdown2==2.3.7',
         'PyGithub==1.56',
-        'PyYAML==5.3.1',
+        'PyYAML>=5',
         'retrying==1.3.3',
         # This package has not been released to pypi since 2019,
         # but the latest code contains features we need.
