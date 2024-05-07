@@ -38,6 +38,7 @@ ROS_DISTRO_TO_UBUNTU_DISTRO = {
     'galactic': 'focal',
     'humble': 'jammy',
     'iron': 'jammy',
+    'jazzy': 'noble',
     'rolling': ''  # use default
 }
 
