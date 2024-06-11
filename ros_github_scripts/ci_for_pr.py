@@ -342,7 +342,8 @@ def parse_args():
         help='Arbitrary colcon arguments to specify to test; must be specified with -b')
     parser.add_argument(
         '--cmake-args', type=str, default='',
-        help='Arbitrary CMake arguments to specify to build; must be specified with -b')
+        help='Arbitrary CMake arguments to specify to build; Each argument shall be prefixed'
+             ' with -D. CMake arguments shall only be used with -b --build option.')
     return parser.parse_args()
 
 
@@ -383,7 +384,7 @@ def main():
             extra_test_args += f' --packages-above {packages_changed}'
 
     if parsed.cmake_args:
-        extra_build_args += f' --cmake-args -D{parsed.cmake_args}'
+        extra_build_args += f' --cmake-args {parsed.cmake_args}'
 
     comment_texts = []
     comment_texts.append(
