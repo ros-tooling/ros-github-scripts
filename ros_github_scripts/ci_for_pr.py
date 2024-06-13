@@ -341,6 +341,10 @@ def parse_args():
     parser.add_argument(
         '--colcon-test-args', type=str, default='',
         help='Arbitrary colcon arguments to specify to test; must be specified with -b')
+    parser.add_argument(
+        '--cmake-args', type=str, default='',
+        help='Arbitrary CMake arguments to specify to build; Each argument shall be prefixed'
+             ' with -D. CMake arguments shall only be used with -b --build option.')
     return parser.parse_args()
 
 
@@ -365,8 +369,9 @@ def main():
     gist = create_ci_gist(github_instance, chosen_pulls, parsed.target)
     gist_url = gist.files['ros2.repos'].raw_url
 
-    if not parsed.build and (parsed.colcon_build_args or parsed.colcon_test_args):
-        panic('colcon build or test args can only be specified when doing a build')
+    if not parsed.build and \
+            (parsed.colcon_build_args or parsed.colcon_test_args or parsed.cmake_args):
+        panic('colcon build, cmake or test args can only be specified when doing a build')
 
     extra_build_args = parsed.colcon_build_args
     extra_test_args = parsed.colcon_test_args
@@ -378,6 +383,9 @@ def main():
         else:
             extra_build_args += f' --packages-above-and-dependencies {packages_changed}'
             extra_test_args += f' --packages-above {packages_changed}'
+
+    if parsed.cmake_args:
+        extra_build_args += f' --cmake-args {parsed.cmake_args}'
 
     comment_texts = []
     comment_texts.append(
