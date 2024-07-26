@@ -318,16 +318,18 @@ def comment_results(
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Generate a CI build request for Pull Request(s)')
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         '-p', '--pulls', type=str, nargs='+',
         help='Space-separated list of pull requests to process, in format ORG/REPO#PULLNUMBER '
              '(e.g. ros2/rclpy#353)')
+    group.add_argument(
+        '-i', '--interactive', action='store_true',
+        help='Prompt me to select my pull requests from a list, instead of specifying.')
+
     parser.add_argument(
         '-k', '--packages', type=str, nargs='+', default=None,
         help='Space-separated list of packages to be built and tested.')
-    parser.add_argument(
-        '-i', '--interactive', action='store_true',
-        help='Prompt me to select my pull requests from a list, instead of specifying.')
     parser.add_argument(
         '-t', '--target', type=str, default=DEFAULT_TARGET,
         help='Target distro for PRs; assumes {}.'.format(DEFAULT_TARGET))
