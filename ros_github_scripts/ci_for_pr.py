@@ -39,6 +39,12 @@ ROS_DISTRO_TO_UBUNTU_DISTRO = {
     'rolling': ''  # use default
 }
 
+ROS_DISTRO_TO_RHEL_DISTRO = {
+    'humble': '8',
+    'iron': '9',
+    'jazzy': '9',
+    'rolling': ''  # use default
+}
 
 def panic(msg: str) -> None:
     raise RuntimeError('Panic: ' + msg)
@@ -225,6 +231,7 @@ def run_jenkins_build(
     """
     # intentionally raises key_error on unknown distro
     ubuntu_distro = ROS_DISTRO_TO_UBUNTU_DISTRO[target_release]
+    rhel_distro = ROS_DISTRO_TO_RHEL_DISTRO[target_release]
 
     from jenkinsapi.jenkins import Jenkins
     logger.info('Connecting to Jenkins server')
@@ -255,6 +262,8 @@ def run_jenkins_build(
     build_params['CI_TEST_ARGS'] += f' {test_args}'
     if ubuntu_distro:
         build_params['CI_UBUNTU_DISTRO'] = ubuntu_distro
+    if rhel_distro:
+        build_params['CI_EL_RELEASE'] = rhel_distro
 
     # Start the build and wait until it is completed. ci_launcher exits immediately after
     # queuing the child builds, so this should only take a few seconds
