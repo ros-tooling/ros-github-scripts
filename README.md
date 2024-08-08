@@ -29,6 +29,7 @@ ros-ci-for-pr \
   --comment
 ```
 
+Note that the access token must have at least the "public_repo" permission (to be able to post comments), along with the "gist" permission (to be able to create gists).
 
 ## ros-github-contribution-report
 
