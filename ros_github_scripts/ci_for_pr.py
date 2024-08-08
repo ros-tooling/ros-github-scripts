@@ -32,10 +32,7 @@ CI_SERVER = 'https://ci.ros2.org'
 SERVER_RETRIES = 2
 
 ROS_DISTRO_TO_UBUNTU_DISTRO = {
-    'melodic': 'bionic',
     'noetic': 'focal',
-    'foxy': 'focal',
-    'galactic': 'focal',
     'humble': 'jammy',
     'iron': 'jammy',
     'jazzy': 'noble',
