@@ -15,6 +15,7 @@
 import argparse
 import logging
 import os
+import re
 from typing import Dict, List
 
 import github
@@ -175,11 +176,18 @@ def validate_and_fetch_pull_list(
     github_instance: Github, pull_list: List[str]
 ) -> List[github.PullRequest.PullRequest]:
     """Fetch GitHub pull requests given the "org/repo#N" string input specifier format."""
+    github_url_re = re.compile(r'https://github.com/(.*)/(.*)/pull/([0-9]+)')
     repos_to_prs = {}
     for pull in pull_list:
-        if pull.count('#') != 1:
-            panic("Pull request descriptor doesn't match org/repo#number format: {}".format(pull))
-        repo, pull_number_str = pull.split('#')
+        url_match = re.match(github_url_re, pull)
+        if url_match is not None:
+            repo = '/'.join([url_match[1], url_match[2]])
+            pull_number_str = url_match[3]
+        else:
+            if pull.count('#') != 1:
+                panic("Pull request descriptor doesn't match org/repo#number format: {}".format(pull))
+            repo, pull_number_str = pull.split('#')
+
         try:
             pull_number = int(pull_number_str)
         except TypeError:
@@ -322,7 +330,7 @@ def parse_args():
     group.add_argument(
         '-p', '--pulls', type=str, nargs='+',
         help='Space-separated list of pull requests to process, in format ORG/REPO#PULLNUMBER '
-             '(e.g. ros2/rclpy#353)')
+             '(e.g. ros2/rclpy#353) or https://github.com/ORG/REPO/pull/PULLNUMBER')
     group.add_argument(
         '-i', '--interactive', action='store_true',
         help='Prompt me to select my pull requests from a list, instead of specifying.')
