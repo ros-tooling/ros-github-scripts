@@ -24,7 +24,7 @@ import requests
 import yaml
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('')
+logger = logging.getLogger(__name__)
 
 DEFAULT_JOB = 'ci_launcher'
 REPOS_URL = 'https://raw.githubusercontent.com/ros2/ros2/{}/ros2.repos'
@@ -317,10 +317,10 @@ def comment_results(
         for pull in pulls:
             logger.info(f'Posting info as comment on {pull.html_url}')
             pull.create_issue_comment(body=contents)
-        logger.info('>>> AUTO-COMMENTED BELOW CONTENT ON ALL PRS <<<')
+        print('\n>>> AUTO-COMMENTED BELOW CONTENT ON ALL PRS <<<')
     else:
-        logger.info('>>>> COPY-PASTE BELOW CONTENT TO PRS <<<')
-    logger.info(contents)
+        print('\n>>> COPY-PASTE BELOW CONTENT TO PRS <<<')
+    print(contents)
 
 
 def parse_args():
@@ -350,7 +350,7 @@ def parse_args():
         help='Automatically post a comment on the PRs being built, containing relevant content.')
     parser.add_argument(
         '--only-fixes-test', action='store_true',
-        help='The fix being tested only fixes a test, which causes CI to be shorter')
+        help='The fix being tested only fixes a test, which causes CI to be shorter. (prevails other colcon build and test arguments)')
     parser.add_argument(
         '--colcon-build-args', type=str, default='',
         help='Arbitrary colcon arguments to specify to build; must be specified with -b')
@@ -394,11 +394,17 @@ def main():
     if parsed.packages:
         packages_changed = ' '.join(parsed.packages)
         if parsed.only_fixes_test:
-            extra_build_args += f' --packages-up-to {packages_changed}'
-            extra_test_args += f' --packages-select {packages_changed}'
+            extra_build_args = f' --packages-up-to {packages_changed}'
+            extra_test_args = f' --packages-select {packages_changed}'
         else:
-            extra_build_args += f' --packages-above-and-dependencies {packages_changed}'
-            extra_test_args += f' --packages-above {packages_changed}'
+            if parsed.colcon_build_args:
+                extra_build_args += f' {packages_changed}'
+            else:
+                extra_build_args = f' --packages-above-and-dependencies {packages_changed}'
+            if parsed.colcon_test_args:
+                extra_test_args += f' {packages_changed}'
+            else:
+                extra_test_args = f' --packages-above {packages_changed}'
 
     if parsed.cmake_args:
         extra_build_args += f' --cmake-args {parsed.cmake_args}'
