@@ -29,7 +29,7 @@ ros-ci-for-pr \
   --comment
 ```
 
-Note that the access token must have at least the "public_repo" permission (to be able to post comments), along with the "gist" permission (to be able to create gists).
+Note that the access token must have at least the "public_repo" permission (to be able to post comments), the "gist" permission (to be able to create gists), and the "read:org" permission (to be able to create the Jenkins job).
 
 ## ros-github-contribution-report
 
