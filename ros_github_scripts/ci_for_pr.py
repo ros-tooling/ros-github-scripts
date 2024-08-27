@@ -365,6 +365,8 @@ def parse_args():
 
 
 def main():
+    parsed = parse_args()
+
     github_access_token = os.environ.get('GITHUB_ACCESS_TOKEN')
     if not github_access_token:
         github_access_token = os.environ.get('GITHUB_TOKEN')
@@ -372,7 +374,6 @@ def main():
         panic('Neither environment variable GITHUB_ACCESS_TOKEN nor GITHUB_TOKEN are set')
     github_instance = Github(github_access_token)
 
-    parsed = parse_args()
     pull_texts = parsed.pulls
     if parsed.interactive:
         all_user_pulls = fetch_user_pulls(github_instance)
