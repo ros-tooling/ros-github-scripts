@@ -26,8 +26,7 @@ ros-ci-for-pr \
   --pulls ros2/rosbag2#654 \
   --packages rosbag2_cpp rosbag2_tests \
   --build \
-  --colcon-build-args="--packages-up-to" \
-  --colcon-test-args="--packages-select" \
+  --colcon-build-args="--continue-on-error" \
   --comment
 ```
 

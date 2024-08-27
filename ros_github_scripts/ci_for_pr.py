@@ -350,7 +350,7 @@ def parse_args():
         help='Automatically post a comment on the PRs being built, containing relevant content.')
     parser.add_argument(
         '--only-fixes-test', action='store_true',
-        help='The fix being tested only fixes a test, which causes CI to be shorter. (prevails other colcon build and test arguments)')
+        help='The fix being tested only fixes a test, which causes CI to be shorter')
     parser.add_argument(
         '--colcon-build-args', type=str, default='',
         help='Arbitrary colcon arguments to specify to build; must be specified with -b')
@@ -394,17 +394,11 @@ def main():
     if parsed.packages:
         packages_changed = ' '.join(parsed.packages)
         if parsed.only_fixes_test:
-            extra_build_args = f' --packages-up-to {packages_changed}'
-            extra_test_args = f' --packages-select {packages_changed}'
+            extra_build_args += f' --packages-up-to {packages_changed}'
+            extra_test_args += f' --packages-select {packages_changed}'
         else:
-            if parsed.colcon_build_args:
-                extra_build_args += f' {packages_changed}'
-            else:
-                extra_build_args = f' --packages-above-and-dependencies {packages_changed}'
-            if parsed.colcon_test_args:
-                extra_test_args += f' {packages_changed}'
-            else:
-                extra_test_args = f' --packages-above {packages_changed}'
+            extra_build_args += f' --packages-above-and-dependencies {packages_changed}'
+            extra_test_args += f' --packages-above {packages_changed}'
 
     if parsed.cmake_args:
         extra_build_args += f' --cmake-args {parsed.cmake_args}'
