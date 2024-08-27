@@ -24,7 +24,7 @@ import requests
 import yaml
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('')
+logger = logging.getLogger(__name__)
 
 DEFAULT_JOB = 'ci_launcher'
 REPOS_URL = 'https://raw.githubusercontent.com/ros2/ros2/{}/ros2.repos'
@@ -317,10 +317,10 @@ def comment_results(
         for pull in pulls:
             logger.info(f'Posting info as comment on {pull.html_url}')
             pull.create_issue_comment(body=contents)
-        logger.info('>>> AUTO-COMMENTED BELOW CONTENT ON ALL PRS <<<')
+        print('\n>>> AUTO-COMMENTED BELOW CONTENT ON ALL PRS <<<')
     else:
-        logger.info('>>>> COPY-PASTE BELOW CONTENT TO PRS <<<')
-    logger.info(contents)
+        print('\n>>> COPY-PASTE BELOW CONTENT TO PRS <<<')
+    print(contents)
 
 
 def parse_args():
@@ -365,6 +365,8 @@ def parse_args():
 
 
 def main():
+    parsed = parse_args()
+
     github_access_token = os.environ.get('GITHUB_ACCESS_TOKEN')
     if not github_access_token:
         github_access_token = os.environ.get('GITHUB_TOKEN')
@@ -372,7 +374,6 @@ def main():
         panic('Neither environment variable GITHUB_ACCESS_TOKEN nor GITHUB_TOKEN are set')
     github_instance = Github(github_access_token)
 
-    parsed = parse_args()
     pull_texts = parsed.pulls
     if parsed.interactive:
         all_user_pulls = fetch_user_pulls(github_instance)
