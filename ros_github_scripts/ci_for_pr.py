@@ -16,7 +16,9 @@ import argparse
 import logging
 import os
 import re
-from typing import Dict, List
+from typing import Dict
+from typing import List
+from typing import Optional
 
 import github
 from github import Github, InputFileContent
@@ -207,27 +209,35 @@ def validate_and_fetch_pull_list(
 
 
 def format_ci_details(
-    gist_url: str,
+    *,
+    gist_url: Optional[str],
     extra_build_args: str,
     extra_test_args: str,
     target_release: str,
-    target_pulls: List[str],
+    target_pulls: Optional[List[str]],
+    branch_name: Optional[str],
 ) -> str:
-    pull_text = ', '.join(target_pulls)
-    return '\n'.join([
-        f'Pulls: {pull_text}',
-        f'Gist: {gist_url}',
+    details = []
+    if target_pulls:
+        details.append(f"Pulls: {', '.join(target_pulls)}")
+    if gist_url:
+        details.append(f'Gist: {gist_url}')
+    if branch_name:
+        details.append(f'Branch: {branch_name}')
+    return details + [
         f'BUILD args: {extra_build_args}',
         f'TEST args: {extra_test_args}',
         f'ROS Distro: {target_release}',
         'Job: {}'.format(DEFAULT_JOB),
-    ])
+    ]
 
 
 def run_jenkins_build(
+    *,
     build_args: str,
     test_args: str,
-    gist_url: str,
+    gist_url: Optional[str],
+    branch_name: Optional[str],
     github_login: str,
     github_token: str,
     target_release: str,
@@ -237,6 +247,8 @@ def run_jenkins_build(
 
     :returns: Text containing markdown of the build status badges for the launched build.
     """
+    assert gist_url or branch_name, 'Either a gist URL or a branch name must be provided'
+
     # intentionally raises key_error on unknown distro
     ubuntu_distro = ROS_DISTRO_TO_UBUNTU_DISTRO[target_release]
     rhel_distro = ROS_DISTRO_TO_RHEL_DISTRO[target_release]
@@ -264,7 +276,10 @@ def run_jenkins_build(
         for p in param_spec
     }
     # augment with specific values for this PR
-    build_params['CI_ROS2_REPOS_URL'] = gist_url
+    if gist_url:
+        build_params['CI_ROS2_REPOS_URL'] = gist_url
+    if branch_name:
+        build_params['CI_BRANCH_TO_TEST'] = branch_name
     build_params['CI_ROS_DISTRO'] = target_release
     build_params['CI_BUILD_ARGS'] += f' {build_args}'
     build_params['CI_TEST_ARGS'] += f' {test_args}'
@@ -325,39 +340,56 @@ def comment_results(
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Generate a CI build request for Pull Request(s)')
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
+        description='Generate a CI build request for Pull Request(s)',
+        add_help=False)
+
+    select_group = parser.add_argument_group(
+        title='change selection',
+        description='Select the PRs or branch to test.')
+    select_group.add_argument(
+        '--branch', type=str,
+        help='Branch to test across the repositories in the .repos files that have it. Corresponds '
+             'to the CI_BRANCH_TO_TEST ci.ros2.org parameter, which means that this branch gets '
+             'merged into the distro target branch for testing. When using this option with '
+             '--comment, the list of PRs to comment on must be specified using the --pulls or '
+             '--interactive option.')
+    pulls_group = select_group.add_mutually_exclusive_group()
+    pulls_group.add_argument(
         '-p', '--pulls', type=str, nargs='+',
         help='Space-separated list of pull requests to process, in format ORG/REPO#PULLNUMBER '
-             '(e.g. ros2/rclpy#353) or https://github.com/ORG/REPO/pull/PULLNUMBER')
-    group.add_argument(
+             '(e.g. ros2/rclpy#353) or https://github.com/ORG/REPO/pull/PULLNUMBER. When using '
+             'the --branch and --comment options, comments will be posted on these PRs.')
+    pulls_group.add_argument(
         '-i', '--interactive', action='store_true',
-        help='Prompt me to select my pull requests from a list, instead of specifying.')
+        help='Prompt me to select my pull requests from a list, instead of specifying. When using '
+            'the --branch and --comment options, comments will be posted on these PRs.')
 
-    parser.add_argument(
+    # Create a group for these so that they are displayed below the 'change selection' group
+    group = parser.add_argument_group(title='other options')
+    group.add_argument('-h', '--help', action='help')
+    group.add_argument(
         '-k', '--packages', type=str, nargs='+', default=None,
         help='Space-separated list of packages to be built and tested.')
-    parser.add_argument(
+    group.add_argument(
         '-t', '--target', type=str, default=DEFAULT_TARGET,
         help='Target distro for PRs; assumes {}.'.format(DEFAULT_TARGET))
-    parser.add_argument(
+    group.add_argument(
         '-b', '--build', action='store_true',
         help='Automatically start the build job on Jenkins and print out the resulting badges. '
              'Only works if your GitHub user is authorized to run builds.')
-    parser.add_argument(
+    group.add_argument(
         '-c', '--comment', action='store_true',
         help='Automatically post a comment on the PRs being built, containing relevant content.')
-    parser.add_argument(
+    group.add_argument(
         '--only-fixes-test', action='store_true',
         help='The fix being tested only fixes a test, which causes CI to be shorter')
-    parser.add_argument(
+    group.add_argument(
         '--colcon-build-args', type=str, default='',
         help='Arbitrary colcon arguments to specify to build; must be specified with -b')
-    parser.add_argument(
+    group.add_argument(
         '--colcon-test-args', type=str, default='',
         help='Arbitrary colcon arguments to specify to test; must be specified with -b')
-    parser.add_argument(
+    group.add_argument(
         '--cmake-args', type=str, default='',
         help='Arbitrary CMake arguments to specify to build; Each argument shall be prefixed'
              ' with -D. CMake arguments shall only be used with -b --build option.')
@@ -374,17 +406,32 @@ def main():
         panic('Neither environment variable GITHUB_ACCESS_TOKEN nor GITHUB_TOKEN are set')
     github_instance = Github(github_access_token)
 
-    pull_texts = parsed.pulls
+    branch_name = parsed.branch
+    pull_texts = None
+    chosen_pulls = []
     if parsed.interactive:
         all_user_pulls = fetch_user_pulls(github_instance)
         pull_texts, chosen_pulls = prompt_pull_selection(all_user_pulls)
-    elif not parsed.pulls:
-        panic('You must either choose --interactive or provide --pulls')
-    else:
+    elif parsed.pulls:
         chosen_pulls = validate_and_fetch_pull_list(github_instance, parsed.pulls)
 
-    gist = create_ci_gist(github_instance, chosen_pulls, parsed.target)
-    gist_url = gist.files['ros2.repos'].raw_url
+    # Have to select PRs when not providing branch
+    if not branch_name and not chosen_pulls:
+        panic(
+            'When not using --branch, you must select PRs either using --interactive '
+            'or by providing them using --pulls')
+    # Have to select PRs when providing branch and enabling comments
+    if branch_name and parsed.comment and not chosen_pulls:
+        panic(
+            'When using --branch and --comment, you must select PRs to comment on either using '
+            '--interactive or by providing them using --pulls')
+
+    # Only create a gist if we specified PRs and not a branch
+    # We can set both options for ci.ros2.org, but it does not make sense if we select PRs
+    gist_url = None
+    if chosen_pulls and not branch_name:
+        gist = create_ci_gist(github_instance, chosen_pulls, parsed.target)
+        gist_url = gist.files['ros2.repos'].raw_url
 
     if not parsed.build and \
             (parsed.colcon_build_args or parsed.colcon_test_args or parsed.cmake_args):
@@ -407,16 +454,22 @@ def main():
     comment_texts = []
     comment_texts.append(
         format_ci_details(
-            gist_url, extra_build_args, extra_test_args, parsed.target, pull_texts))
+            gist_url=gist_url,
+            extra_build_args=extra_build_args,
+            extra_test_args=extra_test_args,
+            target_release=parsed.target,
+            target_pulls=pull_texts,
+            branch_name=branch_name))
     if parsed.build:
         user = github_instance.get_user().login
         comment_texts.append(
             run_jenkins_build(
-                extra_build_args,
-                extra_test_args,
-                gist_url,
-                user,
-                github_access_token,
+                build_args=extra_build_args,
+                test_args=extra_test_args,
+                gist_url=gist_url,
+                branch_name=branch_name,
+                github_login=user,
+                github_token=github_access_token,
                 target_release=parsed.target))
 
     comment_results(parsed.comment, '\n'.join(comment_texts), chosen_pulls)
