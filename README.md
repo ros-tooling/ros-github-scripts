@@ -13,6 +13,8 @@ pip3 install ./ros-github-scripts
 
 ## ros-ci-for-pr
 
+### With a list of PRs
+
 Creates a github gist containing a modified ros2.repos, with the source branches from one or more PRs.
 Optionally, runs ci.ros2.org jobs and comments the status badges on the PRs in question - if the user has build access to ci.ros2.org.
 
@@ -31,6 +33,26 @@ ros-ci-for-pr \
 ```
 
 Note that the access token must have at least the "public_repo" permission (to be able to post comments), the "gist" permission (to be able to create gists), and the "read:org" permission (to be able to create the Jenkins job).
+
+### With a branch name
+
+As an alternative to the above, a branch name can be provided using the `--branch` option.
+CI tries to check out that branch in all ROS 2 core repositories; if such a branch exists, it then merges it into the distro's target branch and tests that.
+This is useful when making changes to multiple repos at once, but it requires pushing branches to the actual repository and not a fork.
+
+When using the `--branch` and `--comment` options, provide a list of PRs on which to comment using either `--pulls` or `--interactive`.
+
+Example:
+
+```
+export GITHUB_ACCESS_TOKEN=$GITHUB_TOKEN
+ros-ci-for-pr \
+  --branch username/multi-repo-feature \
+  --pulls ros2/repo1#123 ros2/repo2#456 ros2/repo3#789 \
+  --packages pkg1 pkg2 pkg3 \
+  --build \
+  --comment
+```
 
 ## ros-github-contribution-report
 
