@@ -407,7 +407,7 @@ def main():
     github_instance = Github(github_access_token)
 
     branch_name = parsed.branch
-    pull_texts = None
+    pull_texts = parsed.pulls
     chosen_pulls = []
     if parsed.interactive:
         all_user_pulls = fetch_user_pulls(github_instance)
