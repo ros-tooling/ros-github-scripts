@@ -224,12 +224,12 @@ def format_ci_details(
         details.append(f'Gist: {gist_url}')
     if branch_name:
         details.append(f'Branch: {branch_name}')
-    return details + [
+    return '\n'.join(details + [
         f'BUILD args: {extra_build_args}',
         f'TEST args: {extra_test_args}',
         f'ROS Distro: {target_release}',
         'Job: {}'.format(DEFAULT_JOB),
-    ]
+    ])
 
 
 def run_jenkins_build(
