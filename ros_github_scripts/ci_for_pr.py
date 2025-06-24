@@ -29,7 +29,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DEFAULT_JOB = 'ci_launcher'
-REPOS_URL = 'https://raw.githubusercontent.com/ros2/ros2/{}/ros2.repos'
+ROS2_REPO = 'ros2/ros2'
+ROS2_REPOS_FILE = 'ros2.repos'
 DEFAULT_TARGET = 'rolling'
 CI_SERVER = 'https://ci.ros2.org'
 SERVER_RETRIES = 2
@@ -55,14 +56,11 @@ def panic(msg: str) -> None:
     raise RuntimeError('Panic: ' + msg)
 
 
-def fetch_repos(target_release: str) -> dict:
+def fetch_repos(github_instance: Github, target_release: str) -> dict:
     """Fetch the repos file for the specific release."""
-    branch = target_release
-    if branch == 'rolling':
-        branch = 'master'
-    repos_response = requests.get(REPOS_URL.format(branch))
-
-    repos_text = repos_response.text
+    ros2_repo = github_instance.get_repo(ROS2_REPO)
+    repos_file_contents = ros2_repo.get_contents(ROS2_REPOS_FILE, target_release)
+    repos_text = repos_file_contents.decoded_content.decode('utf-8')
     toplevel_dict = yaml.safe_load(repos_text)
     return toplevel_dict['repositories']
 
@@ -74,7 +72,7 @@ def create_ci_gist(
 ) -> github.Gist.Gist:
     """Create gist for the list of pull requests."""
     logger.info('Creating ros2.repos Gist for PRs')
-    master_repos = fetch_repos(target_release)
+    master_repos = fetch_repos(github_instance, target_release)
     shortnames = []
     for github_pr in pulls:
         pr_ref = github_pr.head.ref
