@@ -58,8 +58,6 @@ def panic(msg: str) -> None:
 def fetch_repos(target_release: str) -> dict:
     """Fetch the repos file for the specific release."""
     branch = target_release
-    if branch == 'rolling':
-        branch = 'master'
     repos_response = requests.get(REPOS_URL.format(branch))
 
     repos_text = repos_response.text
