@@ -46,9 +46,9 @@ ROS_DISTRO_TO_UBUNTU_DISTRO = {
 
 ROS_DISTRO_TO_RHEL_DISTRO = {
     'humble': '8',
-    'iron': '9',
-    'jazzy': '9',
-    'kilted': '9',
+    'iron': '9.6',
+    'jazzy': '9.6',
+    'kilted': '9.6',
     'rolling': ''  # use default
 }
 
