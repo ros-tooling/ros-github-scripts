@@ -24,10 +24,7 @@ setup(
         'PyGithub==1.56',
         'PyYAML>=5',
         'retrying==1.3.3',
-        # This package has not been released to pypi since 2019,
-        # but the latest code contains features we need.
-        # until it is released again, get it from github
-        'jenkinsapi @ git+https://github.com/pycontribs/jenkinsapi@299a1b#egg=jenkinsapi',
+        'jenkinsapi==0.3.17',
     ],
     zip_safe=True,
     entry_points={'console_scripts': [
