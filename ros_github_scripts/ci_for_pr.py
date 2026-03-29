@@ -367,8 +367,13 @@ def parse_args():
     # Create a group for these so that they are displayed below the 'change selection' group
     group = parser.add_argument_group(title='other options')
     group.add_argument('-h', '--help', action='help')
+    def printable_package_name(value):
+        if not value.isprintable():
+            raise argparse.ArgumentTypeError(
+                f'package name contains unprintable characters: {value!r}')
+        return value
     group.add_argument(
-        '-k', '--packages', type=str, nargs='+', default=None,
+        '-k', '--packages', type=printable_package_name, nargs='+', default=None,
         help='Space-separated list of packages to be built and tested.')
     group.add_argument(
         '-t', '--target', type=str, default=DEFAULT_TARGET,
