@@ -41,6 +41,7 @@ ROS_DISTRO_TO_UBUNTU_DISTRO = {
     'iron': 'jammy',
     'jazzy': 'noble',
     'kilted': 'noble',
+    'lyrical': 'resolute',
     'rolling': ''  # use default
 }
 
@@ -49,6 +50,7 @@ ROS_DISTRO_TO_RHEL_DISTRO = {
     'iron': '9',
     'jazzy': '9',
     'kilted': '9',
+    'lyrical': '10',
     'rolling': ''  # use default
 }
 
