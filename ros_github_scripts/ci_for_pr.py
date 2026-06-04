@@ -21,7 +21,7 @@ from typing import List
 from typing import Optional
 
 import github
-from github import Github, InputFileContent
+from github import Auth, Github, InputFileContent
 import requests
 import yaml
 
@@ -411,7 +411,7 @@ def main():
         github_access_token = os.environ.get('GITHUB_TOKEN')
     if not github_access_token:
         panic('Neither environment variable GITHUB_ACCESS_TOKEN nor GITHUB_TOKEN are set')
-    github_instance = Github(github_access_token)
+    github_instance = Github(auth=Auth.Token(github_access_token))
 
     branch_name = parsed.branch
     pull_texts = parsed.pulls
