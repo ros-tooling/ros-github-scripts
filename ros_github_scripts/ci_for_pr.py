@@ -320,6 +320,107 @@ def run_jenkins_build(
     return '\n'.join(info_lines)
 
 
+def parse_child_build_urls(text: str) -> Dict[str, str]:
+    """Extract platform -> build_url from badge markdown lines in launcher console/comment."""
+    badge_re = re.compile(r'\* (\S+)\s+\[!\[.*?\]\(.*?\)\]\((https?://[^)]+)\)')
+    result = {}
+    for line in text.split('\n'):
+        m = badge_re.match(line.strip())
+        if m:
+            url = m.group(2).rstrip('/').replace('http://', 'https://')
+            result[m.group(1)] = url
+    return result
+
+
+def fetch_child_build_urls(
+    launcher_url: str, auth: Optional[tuple] = None
+) -> Dict[str, str]:
+    """Fetch ci_launcher console output and return child platform build URLs."""
+    console_url = launcher_url.rstrip('/') + '/consoleText'
+    logger.info(f'Fetching launcher console from {console_url}')
+    resp = requests.get(console_url, auth=auth)
+    resp.raise_for_status()
+    urls = parse_child_build_urls(resp.text)
+    if not urls:
+        panic(f'No child build URLs found in launcher console at {launcher_url}')
+    return urls
+
+
+def fetch_test_report(build_url: str, auth: Optional[tuple] = None) -> Optional[dict]:
+    """Fetch JUnit test report from a Jenkins build. Returns None if not yet available."""
+    url = (
+        build_url.rstrip('/') +
+        '/testReport/api/json'
+        '?tree=failCount,passCount,skipCount,suites[name,cases[className,name,status,errorDetails]]'
+    )
+    resp = requests.get(url, auth=auth)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    data = resp.json()
+    build_resp = requests.get(f'{build_url.rstrip("/")}/api/json?tree=duration', auth=auth)
+    if build_resp.status_code == 200:
+        data['_build_duration_ms'] = build_resp.json().get('duration', 0)
+    return data
+
+
+def format_test_report_comment(
+    platform_reports: Dict[str, Optional[dict]],
+    platform_urls: Dict[str, str],
+    launcher_url: str,
+) -> str:
+    """Format per-platform test results as markdown tables."""
+    lines = ['## CI Test Results']
+
+    # Summary table
+    lines.append('')
+    lines.append('| Platform | Result | Failed | Passed | Skipped | Duration | Report |')
+    lines.append('|----------|--------|-------:|-------:|--------:|---------:|--------|')
+    for platform, report in platform_reports.items():
+        build_url = platform_urls.get(platform, '')
+        report_url = f'{build_url}/testReport/' if build_url else ''
+        report_link = f'[results]({report_url})' if report_url else '—'
+        if report is None:
+            lines.append(f'| {platform} | ⚪ N/A | — | — | — | — | {report_link} |')
+        else:
+            fail = report.get('failCount', 0)
+            passed = report.get('passCount', 0)
+            skipped = report.get('skipCount', 0)
+            status = '✅ pass' if fail == 0 else '❌ fail'
+            ms = report.get('_build_duration_ms', 0)
+            duration = f'{ms // 60000}m {(ms % 60000) // 1000}s' if ms else '—'
+            lines.append(
+                f'| {platform} | {status} | {fail} | {passed} | {skipped}'
+                f' | {duration} | {report_link} |'
+            )
+
+    # Per-platform failure tables (collapsible, sorted by package)
+    for platform, report in platform_reports.items():
+        if report is None or report.get('failCount', 0) == 0:
+            continue
+        failures = sorted(
+            (
+                (c['className'] if c['className'] != 'projectroot' else s['name'], c['name'])
+                for s in report.get('suites', [])
+                for c in s.get('cases', [])
+                if c['status'] not in ('PASSED', 'SKIPPED', 'FIXED')
+            ),
+            key=lambda x: x[0],
+        )
+        fail_count = report.get('failCount', 0)
+        lines.append(f'\n<details>')
+        lines.append(f'<summary><b>{platform}</b> — {fail_count} failure(s)</summary>')
+        lines.append('')
+        lines.append('| Package | Test |')
+        lines.append('|---------|------|')
+        for pkg, test in failures:
+            lines.append(f'| `{pkg}` | {test} |')
+        lines.append('')
+        lines.append('</details>')
+
+    return '\n'.join(lines)
+
+
 def comment_results(
     send_to_github: bool, contents: str, pulls: List[github.PullRequest.PullRequest]
 ) -> None:
@@ -400,6 +501,13 @@ def parse_args():
         '--cmake-args', type=str, default='',
         help='Arbitrary CMake arguments to specify to build; Each argument shall be prefixed'
              ' with -D. CMake arguments shall only be used with -b --build option.')
+    group.add_argument(
+        '--test-report', type=str, default=None, metavar='CI_LAUNCHER_URL',
+        help='Fetch test results from a completed ci_launcher run and post a failure summary. '
+             'Provide the ci_launcher build URL '
+             '(e.g. https://ci.ros2.org/job/ci_launcher/19468). '
+             'Use with --pulls and --comment to post the summary on the PR(s). '
+             'Cannot be combined with --build.')
     return parser.parse_args()
 
 
@@ -433,12 +541,14 @@ def main():
             'When using --branch and --comment, you must select PRs to comment on either using '
             '--interactive or by providing them using --pulls')
 
-    # Only create a gist if we specified PRs and not a branch
-    # We can set both options for ci.ros2.org, but it does not make sense if we select PRs
+    # Only create a gist if we are triggering a build (not for --test-report only)
     gist_url = None
-    if chosen_pulls and not branch_name:
+    if chosen_pulls and not branch_name and not parsed.test_report:
         gist = create_ci_gist(github_instance, chosen_pulls, parsed.target)
         gist_url = gist.files['ros2.repos'].raw_url
+
+    if parsed.build and parsed.test_report:
+        panic('--build and --test-report are mutually exclusive')
 
     if not parsed.build and \
             (parsed.colcon_build_args or parsed.colcon_test_args or parsed.cmake_args):
@@ -459,14 +569,15 @@ def main():
         extra_build_args += f' --cmake-args {parsed.cmake_args}'
 
     comment_texts = []
-    comment_texts.append(
-        format_ci_details(
-            gist_url=gist_url,
-            extra_build_args=extra_build_args,
-            extra_test_args=extra_test_args,
-            target_release=parsed.target,
-            target_pulls=pull_texts,
-            branch_name=branch_name))
+    if not parsed.test_report:
+        comment_texts.append(
+            format_ci_details(
+                gist_url=gist_url,
+                extra_build_args=extra_build_args,
+                extra_test_args=extra_test_args,
+                target_release=parsed.target,
+                target_pulls=pull_texts,
+                branch_name=branch_name))
     if parsed.build:
         user = github_instance.get_user().login
         comment_texts.append(
@@ -478,6 +589,17 @@ def main():
                 github_login=user,
                 github_token=github_access_token,
                 target_release=parsed.target))
+
+    if parsed.test_report:
+        user = github_instance.get_user().login
+        jenkins_auth = (user, github_access_token)
+        child_urls = fetch_child_build_urls(parsed.test_report, auth=jenkins_auth)
+        platform_reports = {}
+        for platform, build_url in child_urls.items():
+            logger.info(f'Fetching test report for {platform} from {build_url}')
+            platform_reports[platform] = fetch_test_report(build_url, auth=jenkins_auth)
+        comment_texts.append(
+            format_test_report_comment(platform_reports, child_urls, parsed.test_report))
 
     comment_results(parsed.comment, '\n'.join(comment_texts), chosen_pulls)
 
