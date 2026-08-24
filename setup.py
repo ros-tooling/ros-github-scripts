@@ -29,6 +29,7 @@ setup(
     zip_safe=True,
     entry_points={'console_scripts': [
       'ros-ci-for-pr = ros_github_scripts.ci_for_pr:main',
+      'ros-find-restarted-ci = ros_github_scripts.find_restarted_ci:main',
       'ros-github-contribution-report = ros_github_scripts.generate_contribution_report:main',
     ]},
     python_requires='>=3.6',
