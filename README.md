@@ -3,12 +3,36 @@ Utility scripts to ease management of GitHub projects for ROS / ROS 2
 
 ## Installation
 
-This is a `setuptools`-based python package. To install it and all its dependencies:
+These are Python command-line tools. The recommended way to install them is with
+[`uv`](https://docs.astral.sh/uv/), which puts the commands on your PATH inside an
+isolated, uv-managed virtual environment.
+
+After installation you can run the commands directly, without a `uv run` prefix
+or manually activating a venv.
 
 ```
 # Note that this is by _path_, it's not the name of a package on PyPI - so substitute as appropriate for your working directory
+uv tool install ./ros-github-scripts
+```
+
+To upgrade an existing install after pulling new changes, add `--force`:
+
+```
+uv tool install --force ./ros-github-scripts
+```
+
+If the commands are not found afterwards, run `uv tool update-shell` and restart
+your shell so uv's tool directory is on your PATH.
+
+[`pipx`](https://pipx.pypa.io/) provides the same isolated-venv behavior if you
+prefer it:
+
+```
 pipx install ./ros-github-scripts
 ```
+
+Standard `pip install ./ros-github-scripts` also still works, but you are then
+responsible for providing the virtual environment yourself.
 
 
 ## ros-ci-for-pr
@@ -80,3 +104,9 @@ ros-github-contribution-report \
 ## Developing
 
 Run tests by invoking `tox` in the repository directory.
+
+For an editable install of the commands while developing, use:
+
+```
+uv tool install --editable .
+```

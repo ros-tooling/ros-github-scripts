@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ros_github_scripts"
+version = "0.1.0"
+description = "A set of scripts used to manage and report about ROS GitHub repositories."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+maintainers = [
+    { name = "ROS Tooling Working Group", email = "ros-tooling@googlegroups.com" },
+]
+dependencies = [
+    "markdown2==2.3.7",
+    # PyGithub >=1.59.1 provides the github.Auth token API used in ci_for_pr;
+    # capped below 2.0 per #39.
+    "PyGithub>=1.59.1,<2",
+    "PyYAML>=5",
+    "retrying==1.3.3",
+    "jenkinsapi==0.3.17",
+]
+
+[project.scripts]
+ros-ci-for-pr = "ros_github_scripts.ci_for_pr:main"
+ros-find-restarted-ci = "ros_github_scripts.find_restarted_ci:main"
+ros-github-contribution-report = "ros_github_scripts.generate_contribution_report:main"
+
+[tool.setuptools]
+packages = ["ros_github_scripts"]
+
+[tool.mypy]
+[[tool.mypy.overrides]]
+module = ["github", "retrying", "markdown2", "urllib"]
+ignore_missing_imports = true
