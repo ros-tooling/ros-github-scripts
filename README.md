@@ -1,6 +1,9 @@
 # ros-github-scripts
 Utility scripts to ease management of GitHub projects for ROS / ROS 2
 
+Driving these tools with an AI coding agent (Claude, Codex, Cursor, etc.)?
+See [`AGENTS.md`](./AGENTS.md) for agent-facing usage guidance.
+
 ## Installation
 
 These are Python command-line tools. The recommended way to install them is with
