@@ -28,6 +28,13 @@ ros-ci-for-pr --pulls ros2/rosbag2#2542 --packages rosbag2_tests --build --comme
 - Default to `--pulls ORG/REPO#N` (one PR per repo) with `--build` and
   `--comment` together. Use `--branch NAME` only for a branch pushed
   directly to `ros2/*` (no fork), e.g. a coordinated multi-repo change.
+- If the PR is part of a GitHub PR stack (`gh api repos/ORG/REPO/pulls/N
+  --jq .stack` is not `null`), use `--stack ORG/REPO#N` instead of
+  `--pulls`: it tests the top PR of the stack, which contains the changes
+  from all PRs of the stack, and comments on every open PR of the stack.
+  It can't be combined with `--pulls`, `--interactive`, or `--branch`.
+  With `--build`, it asks `Continue anyway? [y/N]` if the stack targets
+  another distro or needs a rebase; relay that to the user, don't answer it.
 - **Always pass `--packages`** when you know what the PR touches (`gh pr
   view N -R ORG/REPO --json files`) — an unscoped run builds/tests 300+
   packages across four platforms. It expands to
@@ -35,9 +42,10 @@ ros-ci-for-pr --pulls ros2/rosbag2#2542 --packages rosbag2_tests --build --comme
   test. If the change is test-only, use `--only-fixes-test` instead for a
   much narrower/faster run.
 - `--target <distro>` defaults to `rolling`; set explicitly if the PR's
-  base branch differs.
+  (or PR stack's) base branch differs.
 - Once the build finishes, pull results with `--test-report <ci_launcher
-  URL> --pulls ORG/REPO#N --comment` (mutually exclusive with `--build`).
+  URL> --pulls ORG/REPO#N --comment` (or `--stack ORG/REPO#N`; mutually
+  exclusive with `--build`).
 
 ## ros-find-restarted-ci
 
@@ -58,6 +66,7 @@ Run without `-u` first and show the user what it found before applying.
 | Task | Command |
 |---|---|
 | Launch CI for a PR | `ros-ci-for-pr --pulls ORG/REPO#N --packages PKG... --build --comment` |
+| Launch CI for a PR stack | `ros-ci-for-pr --stack ORG/REPO#N --packages PKG... --build --comment` |
 | Dry run (no Jenkins call) | same, minus `--build` |
 | Pull test results from a finished run | `ros-ci-for-pr --test-report <ci_launcher URL> --pulls ORG/REPO#N --comment` |
 | Fix a stale "failed" badge | `ros-find-restarted-ci -u <PR or comment URL>` |

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import dataclasses
 import logging
 import os
 import re
@@ -230,6 +231,66 @@ def validate_and_fetch_pull_list(
     return return_prs
 
 
+@dataclasses.dataclass
+class PullStack:
+    """GitHub PR stack, with its open PRs ordered from bottom to top."""
+
+    repo: github.Repository.Repository
+    number: int
+    base_ref: str
+    pulls: List[github.PullRequest.PullRequest]
+
+    @property
+    def top(self) -> github.PullRequest.PullRequest:
+        """Get the top PR, whose source branch contains the changes from all PRs in the stack."""
+        return self.pulls[-1]
+
+
+def fetch_pull_stack(github_instance: Github, pull: str) -> PullStack:
+    """
+    Fetch the GitHub PR stack that contains the given pull request.
+
+    Panic if the pull request is not part of a stack or if the stack does not have any open PRs.
+
+    :param pull: pull request, in a format supported by parse_pull_spec()
+    """
+    repo_name, pull_number = parse_pull_spec(pull)
+    repo = github_instance.get_repo(repo_name)
+    # PyGithub does not support PR stacks, so use the REST API directly:
+    # https://docs.github.com/en/rest/pulls/stacks
+    _, stacks = repo._requester.requestJsonAndCheck(
+        'GET', f'{repo.url}/stacks', parameters={'pull_request': pull_number})
+    if not stacks:
+        panic(f'{repo.full_name}#{pull_number} is not part of a GitHub PR stack')
+    # Unclear if a PR can technically be part of >1 stacks; check just in case
+    if len(stacks) > 1:
+        panic(f'{repo.full_name}#{pull_number} is part of multiple GitHub PR stacks')
+    stack = stacks[0]
+    stack_number = stack['number']
+    base_ref = stack['base']['ref']
+
+    open_pull_numbers = []
+    for stack_pull in stack['pull_requests']:
+        stack_pull_number = stack_pull['number']
+        if stack_pull['state'] == 'open':
+            open_pull_numbers.append(stack_pull_number)
+        elif stack_pull['merged_at'] is None:
+            logger.warning(
+                f'{repo.full_name}#{stack_pull_number} is part of the PR stack but was closed '
+                'without being merged; its changes may still be included in the PRs above it')
+    if not open_pull_numbers:
+        panic(f'GitHub PR stack #{stack_number} in {repo.full_name} does not have any open PRs')
+
+    # Sort from bottom to top using the position of each PR in the stack
+    pulls = sorted(
+        (repo.get_pull(number) for number in open_pull_numbers),
+        key=lambda github_pr: github_pr.raw_data['stack']['position'])
+    logger.info(
+        f'Found GitHub PR stack #{stack_number} in {repo.full_name} targeting {base_ref} with '
+        'open PRs (bottom to top): ' + ', '.join(f'#{github_pr.number}' for github_pr in pulls))
+    return PullStack(repo=repo, number=stack_number, base_ref=base_ref, pulls=pulls)
+
+
 def prompt_continue_or_abort(abort_message: str) -> None:
     """Prompt for confirmation to continue anyway, and panic with the given message if not."""
     answer = input('Continue anyway? [y/N] ').strip().lower()
@@ -257,6 +318,37 @@ def validate_pulls_target(
     prompt_continue_or_abort('Target mismatch, aborting')
 
 
+def validate_stack_target(pull_stack: PullStack, target_release: str) -> None:
+    """Prompt for confirmation if the stack's base branch does not match the target release."""
+    if pull_stack.base_ref == target_release:
+        return
+
+    print('\n>>> The PR stack targets a different branch than the selected release <<<')
+    print(f'  {pull_stack.repo.full_name} stack #{pull_stack.number}: {pull_stack.base_ref}')
+    print(f'  Selected target release: {target_release}')
+    prompt_continue_or_abort('Target mismatch, aborting')
+
+
+def validate_stack_up_to_date(pull_stack: PullStack) -> None:
+    """Prompt for confirmation if the top PR is missing changes from other PRs of the stack."""
+    top = pull_stack.top
+    outdated_pulls = []
+    for pull in pull_stack.pulls[:-1]:
+        # The PR's source branch should be an ancestor of the top PR's source branch
+        comparison = pull_stack.repo.compare(pull.head.sha, top.head.sha)
+        if comparison.status not in ('ahead', 'identical'):
+            outdated_pulls.append(pull)
+    if not outdated_pulls:
+        return
+
+    print('\n>>> The top PR of the stack is missing changes from the following PRs <<<')
+    for pull in outdated_pulls:
+        print(f'  {pull_stack.repo.full_name}#{pull.number}: {pull.head.ref}')
+    print(f'  Top PR: {pull_stack.repo.full_name}#{top.number}: {top.head.ref}')
+    print('  CI only tests the top PR, so the PR stack may need to be rebased')
+    prompt_continue_or_abort('PR stack is not up to date, aborting')
+
+
 def format_ci_details(
     *,
     gist_url: Optional[str],
@@ -264,11 +356,13 @@ def format_ci_details(
     extra_test_args: str,
     target_release: str,
     target_pulls: Optional[List[str]],
+    is_pull_stack: bool,
     branch_name: Optional[str],
 ) -> str:
     details = []
     if target_pulls:
-        details.append(f"Pulls: {', '.join(target_pulls)}")
+        pulls_label = 'PR stack' if is_pull_stack else 'Pulls'
+        details.append(f"{pulls_label}: {', '.join(target_pulls)}")
     if gist_url:
         details.append(f'Gist: {gist_url}')
     if branch_name:
@@ -495,7 +589,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
     select_group = parser.add_argument_group(
         title='change selection',
-        description='Select the PRs or branch to test.')
+        description='Select the PRs, PR stack, or branch to test.')
     select_group.add_argument(
         '--branch', type=str,
         help='Branch to test across the repositories in the .repos files that have it. Corresponds '
@@ -513,6 +607,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         '-i', '--interactive', action='store_true',
         help='Prompt me to select my pull requests from a list, instead of specifying. When using '
             'the --branch and --comment options, comments will be posted on these PRs.')
+    pulls_group.add_argument(
+        '-s', '--stack', type=str, metavar='PULL',
+        help='Pull request that is part of a GitHub PR stack, in the same format as --pulls. The '
+             'source branch of the top PR of the stack is tested, which contains the changes '
+             'from all PRs of the stack. When using the --comment option, comments will be '
+             'posted on all open PRs of the stack. Cannot be combined with --branch.')
 
     # Create a group for these so that they are displayed below the 'change selection' group
     group = parser.add_argument_group(title='other options')
@@ -553,9 +653,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help='Fetch test results from a completed ci_launcher run and post a failure summary. '
              'Provide the ci_launcher build URL '
              '(e.g. https://ci.ros2.org/job/ci_launcher/19468). '
-             'Use with --pulls and --comment to post the summary on the PR(s). '
+             'Use with --pulls or --stack and --comment to post the summary on the PR(s). '
              'Cannot be combined with --build.')
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    # --branch can be combined with --pulls and --interactive, so it is not in their group
+    if args.stack and args.branch:
+        parser.error('argument -s/--stack: not allowed with argument --branch')
+    return args
 
 
 def main():
@@ -570,31 +674,43 @@ def main():
 
     branch_name = parsed.branch
     pull_texts = parsed.pulls
+    # PRs to comment on
     chosen_pulls = []
+    pull_stack: Optional[PullStack] = None
     if parsed.interactive:
         all_user_pulls = fetch_user_pulls(github_instance)
         pull_texts, chosen_pulls = prompt_pull_selection(all_user_pulls)
     elif parsed.pulls:
         chosen_pulls = validate_and_fetch_pull_list(github_instance, parsed.pulls)
+    elif parsed.stack:
+        pull_stack = fetch_pull_stack(github_instance, parsed.stack)
+        chosen_pulls = pull_stack.pulls
+        pull_texts = [f'{pull_stack.repo.full_name}#{pull.number}' for pull in pull_stack.pulls]
 
     # Have to select PRs when not providing branch
     if not branch_name and not chosen_pulls:
         panic(
-            'When not using --branch, you must select PRs either using --interactive '
-            'or by providing them using --pulls')
+            'When not using --branch, you must select PRs either using --interactive, '
+            'by providing them using --pulls, or by providing a PR stack using --stack')
     # Have to select PRs when providing branch and enabling comments
     if branch_name and parsed.comment and not chosen_pulls:
         panic(
             'When using --branch and --comment, you must select PRs to comment on either using '
             '--interactive or by providing them using --pulls')
 
-    if parsed.build and chosen_pulls:
+    if parsed.build and pull_stack:
+        validate_stack_target(pull_stack, parsed.target)
+        validate_stack_up_to_date(pull_stack)
+    elif parsed.build and chosen_pulls:
         validate_pulls_target(chosen_pulls, parsed.target)
 
     # Only create a gist if we are triggering a build (not for --test-report only)
     gist_url = None
     if chosen_pulls and not branch_name and not parsed.test_report:
-        gist = create_ci_gist(github_instance, chosen_pulls, parsed.target)
+        # The top PR of a stack contains the changes from all PRs of the stack
+        gist_pulls = [pull_stack.top] if pull_stack else chosen_pulls
+        gist = create_ci_gist(
+            github_instance, gist_pulls, parsed.target, description_pulls=chosen_pulls)
         gist_url = gist.files['ros2.repos'].raw_url
 
     if parsed.build and parsed.test_report:
@@ -627,6 +743,7 @@ def main():
                 extra_test_args=extra_test_args,
                 target_release=parsed.target,
                 target_pulls=pull_texts,
+                is_pull_stack=pull_stack is not None,
                 branch_name=branch_name))
     if parsed.build:
         user = github_instance.get_user().login

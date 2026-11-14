@@ -84,6 +84,28 @@ ros-ci-for-pr \
   --comment
 ```
 
+### With a GitHub PR stack
+
+As another alternative, a PR that is part of a [GitHub PR stack](https://gh.io/stacks) can be provided using the `--stack` option, in the same format as `--pulls`.
+Any PR of the stack can be provided: the whole stack is looked up, and the source branch of the top PR is used in the modified `ros2.repos`, so CI tests the changes from _all_ PRs of the stack together.
+When using the `--comment` option, the comment is posted on every open PR of the stack.
+
+Example:
+
+```
+export GITHUB_ACCESS_TOKEN=$GITHUB_TOKEN
+ros-ci-for-pr \
+  --stack ros2/repo#123 \
+  --packages pkg1 pkg2 \
+  --build \
+  --comment
+```
+
+Testing a PR stack along with other PRs is not supported for now: the `--stack` option cannot be combined with `--pulls`, `--interactive`, or `--branch`.
+Also note that GitHub requires all branches of a stack to be in the same repository: stacks across forks are not supported.
+
+Before starting a build, you are asked for confirmation if the stack targets a different branch than the selected `--target` release, or if the top PR is missing changes from other PRs of the stack (i.e., the stack needs to be rebased).
+
 ## ros-github-contribution-report
 
 Generates a report of merged PRs on GitHub from a set of authors, optionally filtered by time and destination, and rendered to a variety of formats.
