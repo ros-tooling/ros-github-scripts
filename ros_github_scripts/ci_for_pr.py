@@ -19,6 +19,7 @@ import re
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 import github
 from github import Auth, Github, InputFileContent
@@ -70,18 +71,21 @@ def fetch_repos(github_instance: Github, target_release: str) -> dict:
 def create_ci_gist(
     github_instance: Github,
     pulls: List[github.PullRequest.PullRequest],
-    target_release: str
+    target_release: str,
+    description_pulls: Optional[List[github.PullRequest.PullRequest]] = None,
 ) -> github.Gist.Gist:
-    """Create gist for the list of pull requests."""
+    """
+    Create gist for the list of pull requests.
+
+    :param pulls: pull requests whose source branches to use in the ros2.repos file
+    :param description_pulls: pull requests to list in the gist description, if not `pulls`
+    """
     logger.info('Creating ros2.repos Gist for PRs')
     master_repos = fetch_repos(github_instance, target_release)
-    shortnames = []
     for github_pr in pulls:
         pr_ref = github_pr.head.ref
         pr_repo = github_pr.head.repo.full_name
         base_repo = github_pr.base.repo.full_name
-
-        shortnames.append(f'{base_repo}#{github_pr.number}')
 
         # Remove the existing repository from the list
         repo_entry = master_repos.pop(base_repo, None)
@@ -102,6 +106,10 @@ def create_ci_gist(
 
     yaml_out = yaml.dump({'repositories': master_repos}, default_flow_style=False)
 
+    shortnames = [
+        f'{github_pr.base.repo.full_name}#{github_pr.number}'
+        for github_pr in (description_pulls or pulls)
+    ]
     input_file = InputFileContent(content=yaml_out)
     gist = github_instance.get_user().create_gist(
         public=True,
@@ -176,26 +184,38 @@ def prompt_pull_selection(
     return (texts, [issue.as_pull_request() for issue in choices.values()])
 
 
+def parse_pull_spec(pull: str) -> Tuple[str, int]:
+    """
+    Parse a pull request specifier.
+
+    :param pull: pull request, in the ORG/REPO#PULLNUMBER or
+        https://github.com/ORG/REPO/pull/PULLNUMBER format
+    :returns: the ORG/REPO repository name and the pull request number
+    """
+    github_url_re = re.compile(r'https://github.com/(.*)/(.*)/pull/([0-9]+)')
+    url_match = re.match(github_url_re, pull)
+    if url_match is not None:
+        repo = '/'.join([url_match[1], url_match[2]])
+        pull_number_str = url_match[3]
+    else:
+        if pull.count('#') != 1:
+            panic("Pull request descriptor doesn't match org/repo#number format: {}".format(pull))
+        repo, pull_number_str = pull.split('#')
+
+    try:
+        pull_number = int(pull_number_str)
+    except ValueError:
+        panic("Pull request number '{}' isn't a number...".format(pull_number_str))
+    return repo, pull_number
+
+
 def validate_and_fetch_pull_list(
     github_instance: Github, pull_list: List[str]
 ) -> List[github.PullRequest.PullRequest]:
     """Fetch GitHub pull requests given the "org/repo#N" string input specifier format."""
-    github_url_re = re.compile(r'https://github.com/(.*)/(.*)/pull/([0-9]+)')
     repos_to_prs = {}
     for pull in pull_list:
-        url_match = re.match(github_url_re, pull)
-        if url_match is not None:
-            repo = '/'.join([url_match[1], url_match[2]])
-            pull_number_str = url_match[3]
-        else:
-            if pull.count('#') != 1:
-                panic("Pull request descriptor doesn't match org/repo#number format: {}".format(pull))
-            repo, pull_number_str = pull.split('#')
-
-        try:
-            pull_number = int(pull_number_str)
-        except ValueError:
-            panic("Pull request number '{}' isn't a number...".format(pull_number_str))
+        repo, pull_number = parse_pull_spec(pull)
 
         if repo in repos_to_prs:
             panic(f"Can't simultaneously test multiple PRs for the same repository ({repo})")
@@ -208,6 +228,13 @@ def validate_and_fetch_pull_list(
         return_prs.append(gh_repo.get_pull(pull_number))
 
     return return_prs
+
+
+def prompt_continue_or_abort(abort_message: str) -> None:
+    """Prompt for confirmation to continue anyway, and panic with the given message if not."""
+    answer = input('Continue anyway? [y/N] ').strip().lower()
+    if answer != 'y':
+        panic(abort_message)
 
 
 def validate_pulls_target(
@@ -227,9 +254,7 @@ def validate_pulls_target(
     for pull, base_ref in mismatches:
         print(f'  {pull.base.repo.full_name}#{pull.number}: {base_ref}')
     print(f'  Selected target release: {target_release}')
-    answer = input('Continue anyway? [y/N] ').strip().lower()
-    if answer != 'y':
-        panic('Target mismatch, aborting')
+    prompt_continue_or_abort('Target mismatch, aborting')
 
 
 def format_ci_details(
@@ -463,7 +488,7 @@ def comment_results(
     print(contents)
 
 
-def parse_args():
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Generate a CI build request for Pull Request(s)',
         add_help=False)
@@ -530,7 +555,7 @@ def parse_args():
              '(e.g. https://ci.ros2.org/job/ci_launcher/19468). '
              'Use with --pulls and --comment to post the summary on the PR(s). '
              'Cannot be combined with --build.')
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main():
