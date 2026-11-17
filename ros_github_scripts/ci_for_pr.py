@@ -194,7 +194,7 @@ def validate_and_fetch_pull_list(
 
         try:
             pull_number = int(pull_number_str)
-        except TypeError:
+        except ValueError:
             panic("Pull request number '{}' isn't a number...".format(pull_number_str))
 
         if repo in repos_to_prs:
